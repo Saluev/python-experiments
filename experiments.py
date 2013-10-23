@@ -1,5 +1,5 @@
 import multiprocessing
-from multiprocessing import Process, Manager, Value
+from multiprocessing import Pool
 import sys, os, tempfile
 from time import time, sleep
 from itertools import product
@@ -7,10 +7,41 @@ from itertools import product
 # host process __abort should be always equal to 0
 __abort = 0
 
+
+def average(l):
+    return sum(l) / float(len(l))
+
+
+class ExperimentalData(list):
+  def __init__(self, raw, result_selection_func = lambda x: x[0]):
+    self.raw = raw
+    __h = lambda args: frozenset(args.items())
+    
+    by_arg = {}
+    for item in raw:
+	args = item['args']
+	time = item['time']
+	result = item['result']
+	args = __h(args)
+	if args not in by_arg:
+	  by_arg[args] = []
+	by_arg[args].append((time, result))
+    
+    averaged = []
+    for a, data in by_arg.iteritems():
+	times, results = zip(*data)
+	averaged.append({
+	    'args'  : dict(a),
+	    'result': result_selection_func(results),
+	    'time'  : average(times),
+	})
+    
+    super(ExperimentalData, self).__init__(averaged)
+
 def __start_process(args):
     global __abort
     if __abort:
-        return "", "", []
+        return []
     try:
         results = []
         
@@ -18,9 +49,6 @@ def __start_process(args):
         if callable(iterations):
             iterations = iterations(**kwargs)
         
-        stdout = sys.stdout
-        sys.stdout = tempfile.TemporaryFile()
-        sys.stderr = tempfile.TemporaryFile()
         for i in xrange(iterations):
             t = time()
             result = func(**kwargs)
@@ -29,22 +57,15 @@ def __start_process(args):
     except KeyboardInterrupt:
         __abort = 1
     finally:
-        # acquiring output
-        sys.stdout.flush()
-        sys.stdout.seek(0)
-        log = sys.stdout.read()
-        # acquiring error log
-        sys.stderr.flush()
-        sys.stderr.seek(0)
-        err = sys.stderr.read()
-        return log, err, results
+	return results
 
 def start(func, iterations=10, cores=1, **kwargs):
+    global __abort
+    __abort = 0
     # creating an array of all necessary kwargs configurations
     calls = None
-    for argname in kwargs:
-        argvalue = kwargs[argname]
-        if isinstance(argvalue, list):
+    for argname, argvalue in kwargs.items():
+        if isinstance(argvalue, (list, tuple)):
             if calls is None:
                 calls = [{argname: val} for val in argvalue]
             else:
@@ -54,8 +75,7 @@ def start(func, iterations=10, cores=1, **kwargs):
                 calls = [{argname: argvalue}]
             else:
                 calls = [dict(call, **{argname: argvalue}) for call in calls]
-    
-    pool = multiprocessing.Pool(processes=cores)
+    pool = Pool(cores)
     calls = [(func, iterations, call) for call in calls]
     try:
         data = pool.map_async(__start_process, calls)
@@ -63,6 +83,8 @@ def start(func, iterations=10, cores=1, **kwargs):
             sleep(0.1)
         data = data.get()
         pool.close()
+        #data = pool.map(__start_process, calls) # ignores my smart Ctrl+C handling
+        #pool.close()
     except KeyboardInterrupt:
         if not isinstance(data, list):
             sys.stderr.write("Keyboard interrupt. Further computations aborted.\n")
@@ -84,9 +106,10 @@ def start(func, iterations=10, cores=1, **kwargs):
     pool.join()
     if data:
         #print "Computations done."
-        results = [results for log, err, results in data if len(results) > 0]
-        log = "\n".join([log for log, err,results in data])
-        err = "\n".join([err for log, err,results in data])
+        results = reduce(lambda x, y: x + y, data)
+        #results = [results for log, err, results in data if len(results) > 0]
+        #log = "\n".join([log for log, err,results in data])
+        #err = "\n".join([err for log, err,results in data])
         #print [results for log, err, results in data]
-        return log, err, results
+        return ExperimentalData(results)
     

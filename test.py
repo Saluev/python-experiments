@@ -11,4 +11,5 @@ def f(x, y, z):
         tmp *= q
     return abs(result - exp(1.0)) #result ** (x + y + z) - exp(x + y + z)
 
-experiments.start(f, iterations=10, cores=2, x = range(10), y = 1, z = 1)
+r = experiments.start(f, iterations=100, cores=4, x = range(10), y = 1, z = (1, 2))
+print "Results:\n", "\n".join(map(str, r))
