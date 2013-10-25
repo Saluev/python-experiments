@@ -12,17 +12,23 @@ from equations import *
 
 class Problem(object):
   
-  region      = None
-  mesh        = None
-  discretizer = None
-  equation    = None
-  solver      = None
+  region      = None    # the region to build mesh in
+  mesh        = None    # the mesh builder class
+  basis       = None    # the basis function class
+  method      = None    # the method for discretization
+  equation    = None    # the equation to discretize
+  solver      = None    # the linear systems solver
   
   def solve(self, rhs, initial_solution = 0, **kwargs):
-    mesh = self.mesh(self.region, **kwargs)
-    rhs = self.discretizer(mesh, rhs, **kwargs)
-    x = self.discretizer(mesh, initial_solution, **kwargs)
-    operator = self.discretizer(mesh, equation, **kwargs)
-    solution = self.solver(operator, x, rhs, **kwargs)
+    # TODO: boundary conditions
+    mesh     = self.mesh(region = self.region, **kwargs)
+    basis = [self.basis(el, **kwargs) for el in mesh.elements] # TODO: more flexible
+    equation = self.equation(region = self.region, **kwargs)
+    rhs      = equation.rhs(**kwargs)
+    method   = self.method(basis = basis, **kwargs)
+    rhs      = method.rhs(rhs = rhs, **kwargs)
+    operator = method.operator(equation = equation, **kwargs)
+    initial  = operator.initial(**kwargs)
+    solution = self.solver(operator = operator, initial = initial, rhs = rhs, **kwargs)
     return solution
 

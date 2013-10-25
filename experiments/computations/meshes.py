@@ -76,12 +76,24 @@ class Mesh(object):
     self.elements = []
   
   class Element(object):
-    pass
+    def __init__(self):
+      self.adjacent = set()
+  
+  class ComposedElement(Element):
+    def __init__(self):
+      super(Mesh.ComposedElement, self).__init__()
+      self.elements = []
+    
+    def _process_elements(self):
+      # just in case: we should still count adjacent elements.
+      # ... 
+      pass
   
   class PolygonalElement(Element):
     def __init__(self):
+      super(Mesh.PolygonalElement, self).__init__()
       self.vertices = []
-      self.adjacent = set()
+    
     def _process_vertices(self):
       # find adjacent shapes
       candidates = set(reduce(_sum, map(lambda v: v.elements, self.vertices), []))
@@ -93,10 +105,11 @@ class Mesh(object):
       # register self in vertices
       [v.elements.append(self) for v in self.vertices]
     
-  class Square(PolygonalElement):
+  class Square(PolygonalElement): # TODO use vertices
     def __init__(self, center, radius):
       super(Mesh.Square, self).__init__()
       self.center, self.radius = center, radius
+      #self._process_vertices()
   
   class Triangle(PolygonalElement):
     def __init__(self, v1, v2, v3):
@@ -104,9 +117,21 @@ class Mesh(object):
       # TODO: sort points in CW or CCW order
       self.vertices = [v1, v2, v3]
       self._process_vertices()
-  
-  class Pair(tuple, Element):
-    pass
+      # linear algebra data
+      self.__cross = np.cross(v2 - v1, v3 - v1)
+      self.__mtx = np.array([v2 - v1, v3 - v1, self.__cross]).T
+      self.__mtx_inv = np.linalg.inv(self.__mtx)
+    
+    def __contains__(self, r):
+      v1, v2, v3 = self.vertices
+      coords = np.dot(self.__mtx_inv, r)
+      return 0. <= coords[0] <= 1. and \
+             0. <= coords[1] <= 1. and \
+               abs(coords[2]) < 1E-6
+    
+    def square(self):
+      v1, v2, v3 = self.vertices
+      return 0.5 * np.linalg.norm(self.__cross)
 
 
 class UniformGrid(Mesh):
