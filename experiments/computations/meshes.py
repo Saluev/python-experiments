@@ -5,6 +5,9 @@ import numpy as np
 from numpy import array
 from regions import *
 
+################################################################################
+############################### Vertices buffer ################################
+################################################################################
 _bytes_alignment = 4
 
 class Vertices(object):
@@ -68,6 +71,11 @@ class Elements(Vertices): # TODO?
 
 _sum = lambda x, y: x + y # TODO import from `operators` or something
 
+
+################################################################################
+################################# Mesh objects #################################
+################################################################################
+
 # grids
 class Mesh(object):
   
@@ -75,25 +83,39 @@ class Mesh(object):
     self.vertices = Vertices()
     self.elements = []
   
+  ############################################################
+  ###################### Mesh elements #######################
+  ############################################################
+  
   class Element(object):
     def __init__(self):
       self.adjacent = set()
+    def __contains__(self, r):
+      raise NotImplementedError
+    def square(self):
+      raise NotImplementedError
+  
   
   class ComposedElement(Element):
     def __init__(self):
       super(Mesh.ComposedElement, self).__init__()
       self.elements = []
-    
+    def __contains__(self, r):
+      return any([r in el for el in self.elements])
+    def square(self):
+      return sum([el.square() for el in self.elements])
     def _process_elements(self):
       # just in case: we should still count adjacent elements.
       # ... 
       pass
   
+  
   class PolygonalElement(Element):
     def __init__(self):
       super(Mesh.PolygonalElement, self).__init__()
       self.vertices = []
-    
+    def __contains__(self, r):
+      raise NotImplementedError # TODO
     def _process_vertices(self):
       # find adjacent shapes
       candidates = set(reduce(_sum, map(lambda v: v.elements, self.vertices), []))
@@ -104,12 +126,7 @@ class Mesh(object):
       [el.adjacent.add(self) for el in self.adjacent]
       # register self in vertices
       [v.elements.append(self) for v in self.vertices]
-    
-  class Square(PolygonalElement): # TODO use vertices
-    def __init__(self, center, radius):
-      super(Mesh.Square, self).__init__()
-      self.center, self.radius = center, radius
-      #self._process_vertices()
+  
   
   class Triangle(PolygonalElement):
     def __init__(self, v1, v2, v3):
@@ -121,19 +138,18 @@ class Mesh(object):
       self.__cross = np.cross(v2 - v1, v3 - v1)
       self.__mtx = np.array([v2 - v1, v3 - v1, self.__cross]).T
       self.__mtx_inv = np.linalg.inv(self.__mtx)
-    
     def __contains__(self, r):
       v1, v2, v3 = self.vertices
       coords = np.dot(self.__mtx_inv, r)
       return 0. <= coords[0] <= 1. and \
              0. <= coords[1] <= 1. and \
                abs(coords[2]) < 1E-6
-    
     def square(self):
       v1, v2, v3 = self.vertices
       return 0.5 * np.linalg.norm(self.__cross)
 
 
+#################### Uniform grid ####################
 class UniformGrid(Mesh):
   
   def __init__(self, h):
@@ -150,10 +166,10 @@ class UniformGrid(Mesh):
     while not it.finished:
       pt = it.multi_index * h
       if pt in cube:
-	self.vertices.append(array(pt))
+        self.vertices.append(array(pt))
       pt += 0.5 * h # TEST
       if pt in cube:
-	self.shapes.append(Mesh.Square(pt, 0.5 * h))
+        self.shapes.append(Mesh.Square(pt, 0.5 * h))
     if len(self.vertices) == 0 and len(self.shapes) == 0:
       raise ValueError("Mesh type incompatible with given region!")
     return self

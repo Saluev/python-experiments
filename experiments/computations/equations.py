@@ -5,10 +5,11 @@ import math
 import numpy as np
 from numpy import array
 
-from functions import *
+from functions import Function
 
 # equations
 class Equation(object):
+  # TODO: equation systems support
   
   def __init__(self, left, right, region = None):
     self.left, self.right, self.region = left, right, region
@@ -22,23 +23,74 @@ class Equation(object):
   def __call__(self, region):
     self.region = region
     return self
+  
+  def rhs(self):
+    return self.right if self.left.isUnknown() else self.left
+  
+  def operator(self):
+    lhs = self.left if self.left.isUnknown() else self.right
+    if isinstance(lhs, MappedFunction):
+      return lhs.operator
+    elif isinstance(lhs, UnknownFunction):
+      return identity
+    else:
+      raise NotImplementedError
+
+
 
 
 # unknowns
 class UnknownFunction(Function):
   
+  def isUnknown(self):
+    return True
+  
   def __str__(self):
     return "u"
+  
+  def __eq__(self, what):
+    return Equation(self, what)
+
+
+class MappedFunction(Function):
+  """
+    Operator A such that (Au)(x) = f(x) u(x) for some f.
+  """
+  def __init__(self, operator, f):
+    self.operator, self.f = operator, f
+  
+  def isUnknown(self):
+    return self.f.isUnknown()
+  
+  def __eq__(self, what):
+    if isinstance(self.f, UnknownFunction):
+      return Equation(self, what)
+  
+  def __call__(self, *args):
+    return self.operator.evaluate(self.f, *args)
+  
+  def __str__(self):
+    if isinstance(self.operator, (LinearCombination, Superposition, ScalarOperator)):
+      return "(%s)(%s)" % (str(self.operator), str(self.f))
+    elif self.operator is not None:
+      return "%s(%s)" % (str(self.operator), str(self.f))
+    else:
+      return str(self.f)
+
+
 
 
 # operators
 class Operator(object):
   
+  def isLinear(self):
+    return False
+  
   def __init__(self, name = "?"):
     self.name = name
   
   def __call__(self, f):
-    return ScalarOperator(self, f)
+    return MappedFunction(self, f)
   
   def __eq__(self, what):
     return Equation(self, what)
@@ -77,7 +129,10 @@ class Operator(object):
 
 
 class LinearOperator(Operator):
-  pass # TODO: use linearity for formulae optimization
+  
+  def isLinear(self):
+    return True
+  # TODO: use linearity for formulae optimization
 
 
 class IdentityOperator(LinearOperator):
@@ -85,28 +140,29 @@ class IdentityOperator(LinearOperator):
   def __init__(self):
     super(IdentityOperator, self).__init__("I" or "E")
 
-_identity = IdentityOperator()
+identity = IdentityOperator()
 
-class ScalarOperator(Operator, Function):
+
+class ScalarOperator(LinearOperator):
   """
     Operator A such that (Au)(x) = f(x) u(x) for some f.
   """
-  def __init__(self, origin, f):
-    self.origin, self.f = origin, f
+  def __init__(self, f):
+    self.f = f
   
   def __str__(self):
-    if isinstance(self.origin, (LinearCombination, Superposition, ScalarOperator)):
-      return "(%s)(%s)" % (str(self.origin), str(self.f))
-    else:
-      return "%s(%s)" % (str(self.origin), str(self.f))
+    return str(self.f)
 
 
 class LinearCombination(Operator):
   
+  def isLinear(self):
+    return all([op.isLinear() for op in self.operators])
+  
   def __check_scalar(self, op, coef):
     if isinstance(op, (int, float, np.float32, np.float64, complex, np.complex64, np.complex128)):
       coef *= op
-      op = _identity
+      op = identity
     return op, coef
   
   def __str__(self):
@@ -165,6 +221,9 @@ class LinearCombination(Operator):
 
 
 class Superposition(Operator):
+  
+  def isLinear(self):
+    return all([op.isLinear() for op in self.operators])
   
   def __str__(self):
     return " ".join(map(str, self.operators))

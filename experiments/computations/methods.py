@@ -4,6 +4,7 @@ import math
 import math
 import numpy as np
 from numpy import array
+from functions import dot
 
 # discretization methods
 class Method(object):
@@ -22,9 +23,19 @@ class GalerkinMethod(Method):
   
   def __init__(self, basis, **kwargs):
     super(GalerkinMethod, self).__init__(basis)
+    self.numberOfUnknowns = len(basis)
+    
   
   def rhs(self, rhs, **kwargs):
-    pass
+    return np.array([dot(rhs, f_n) for f_n in self.basis])
   
   def operator(self, equation, **kwargs):
-    pass
+    operator = equation.operator()
+    if operator.isLinear():
+      # quick method
+      pass
+    else:
+      # slow method
+      raise NotImplementedError
+
+
