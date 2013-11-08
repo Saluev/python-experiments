@@ -24,10 +24,9 @@ class Problem(object):
     mesh     = self.mesh(region = self.region, **kwargs)
     basis = [self.basis(el, **kwargs) for el in mesh.elements] # TODO: more flexible
     equation = self.equation(region = self.region, **kwargs)
-    rhs      = equation.rhs(**kwargs)
     method   = self.method(basis = basis, **kwargs)
-    rhs      = method.rhs(rhs = rhs, **kwargs)
-    operator = method.operator(equation = equation, **kwargs)
+    rhs      = method.rhs(rhs = equation.rhs(**kwargs), **kwargs)
+    operator = method.operator(operator = equation.operator(**kwargs), **kwargs)
     initial  = operator.initial(**kwargs)
     solution = self.solver(operator = operator, initial = initial, rhs = rhs, **kwargs)
     return solution

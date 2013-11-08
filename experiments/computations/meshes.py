@@ -147,6 +147,9 @@ class Mesh(object):
     def square(self):
       v1, v2, v3 = self.vertices
       return 0.5 * np.linalg.norm(self.__cross)
+    def center(self):
+      v1, v2, v3 = self.vertices
+      return (v1 + v2 + v3) / 3.
 
 
 #################### Uniform grid ####################

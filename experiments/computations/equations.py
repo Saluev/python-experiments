@@ -4,6 +4,7 @@ import math
 import math
 import numpy as np
 from numpy import array
+import numbers
 
 from functions import Function
 
@@ -24,10 +25,10 @@ class Equation(object):
     self.region = region
     return self
   
-  def rhs(self):
+  def rhs(self, **kwargs):
     return self.right if self.left.isUnknown() else self.left
   
-  def operator(self):
+  def operator(self, **kwargs):
     lhs = self.left if self.left.isUnknown() else self.right
     if isinstance(lhs, MappedFunction):
       return lhs.operator
@@ -76,12 +77,29 @@ class MappedFunction(Function):
       return "%s(%s)" % (str(self.operator), str(self.f))
     else:
       return str(self.f)
+  
+  def __dot__(self, g, **kwargs):
+    if hasattr(self.operator, '__dot__'):
+      return self.operator.__dot__(self.f, g, **kwargs)
+    else:
+      return dot(g, self).conjugate()
+  
+  @property
+  def __dot_priority__(self):
+    if hasattr(self.operator, '__dot_priority__'):
+      return self.operator.__dot_priority__ 
+    else:
+      return 0
 
 
 
 
 # operators
 class Operator(object):
+  
+#  def __dot__(self, f, g, **kwargs):
+#    """This function should calculate (Af, g) in a way."""
+#    raise NotImplementedError
   
   def isLinear(self):
     return False
@@ -121,8 +139,11 @@ class Operator(object):
   
   def __rmul__(self, what):
     try:
-      coef = float(what)
-      return LinearCombination((self, coef))
+      coef = complex(what)
+      try:
+        coef = float(what)
+      finally:
+        return LinearCombination((self, coef))
     except:
       # WTF?
       raise ValueError("Operator can be multiplied only by an operator or a number")
@@ -152,15 +173,24 @@ class ScalarOperator(LinearOperator):
   
   def __str__(self):
     return str(self.f)
+  
+  def evaluate(self, f, *args):
+    return f(*args) * self.f(*args)
 
 
 class LinearCombination(Operator):
+  
+  def __dot__(self, f, g, **kwargs):
+    values = [dot(operator(f), g) for operator in self.operators]
+    return np.dot(values, self.coefficients)
+  
+  __dot_priority__ = 10
   
   def isLinear(self):
     return all([op.isLinear() for op in self.operators])
   
   def __check_scalar(self, op, coef):
-    if isinstance(op, (int, float, np.float32, np.float64, complex, np.complex64, np.complex128)):
+    if isinstance(op, numbers.Number):
       coef *= op
       op = identity
     return op, coef
@@ -171,10 +201,10 @@ class LinearCombination(Operator):
     for op, coef in zip(self.operators, self.coefficients):
       if abs(coef) < 1E-6:
         continue
-      if not just_started or coef < 0:
-        s += " - " if coef < 0 else " + "
-      if abs(abs(coef) - 1.) >= 1E-6:
-        s += "%g * " % abs(coef)
+      if not just_started:
+        s += " + "
+      if abs(coef - 1.) >= 1E-6:
+        s += "%s * " % str(coef)
       s += str(op)
       just_started = False
     return s
@@ -222,6 +252,30 @@ class LinearCombination(Operator):
 
 class Superposition(Operator):
   
+  def __call__(self, f):
+    operator = self.operators[0]
+    if len(self.operators) > 1:
+      subsup = Superposition(*self.operators[1:])
+      return operator(subsup(f))
+    else:
+      return operator(f)
+  
+  """def evaluate(self, f, *args):
+    operator = self.operators[0]
+    if len(self.operators) > 1:
+      subsup = Superposition(*self.operators[1:])
+      return operator.evaluate(subsup(f), *args)
+    else:
+      return operator.evaluate(f, *args)
+  
+  def __dot__(self, f, g, **kwargs):
+    operator = self.operators[0]
+    if len(self.operators) > 1:
+      subsup = Superposition(*self.operators[1:])
+      return dot(operator(subsup(f)), g)
+    else:
+      return dot(operator(f), g)"""
+  
   def isLinear(self):
     return all([op.isLinear() for op in self.operators])
   
@@ -252,12 +306,42 @@ class Divergence(LinearOperator):
   
   def __init__(self):
     super(Divergence, self).__init__("div")
+  
+  def __call__(self, f, **kwargs):
+    if hasattr(f, 'div'):
+      return f.div()
+    else:
+      return super(Divergence, self).__call__(f, **kwargs)
+  
+  def __dot__(self, f, g, **kwargs):
+    # (div f, g) = - (f, grad g)
+    if hasattr(f, 'div'):
+      return  dot(f.div(), g)
+    if hasattr(g, 'grad'):
+      return -dot(f, g.grad())
+  
+  __dot_priority__ = 5
 
 
 class Gradient(LinearOperator):
   
   def __init__(self):
     super(Gradient, self).__init__("grad")
+  
+  def __call__(self, f, **kwargs):
+    if hasattr(f, 'grad'):
+      return f.grad()
+    else:
+      return super(Gradient, self).__call__(f, **kwargs)
+  
+  def __dot__(self, f, g, **kwargs):
+    # (grad f, g) = - (f, div g)
+    if hasattr(f, 'grad'):
+      return  dot(f.grad(), g)
+    if hasattr(g, 'div'):
+      return -dot(f, g.div())
+  
+  __dot_priority__ = 5
 
 
 class FredholmOperator(LinearOperator):
@@ -268,6 +352,14 @@ class FredholmOperator(LinearOperator):
   
   def __str__(self):
     return "(S %s ..dx)" % str(self.kernel)
+  
+  def __dot__(self, f, g, **kwargs):
+    # calculating (Kf, g)... # DON'T USE THIS
+    biv = outer(f, g)
+    return dot(self.kernel, biv)
+  
+  def evaluate(self, f, *args):
+    return self.kernel.__dot_x__(f, *args)
 
 
 
@@ -276,6 +368,5 @@ class FredholmOperator(LinearOperator):
 div = Divergence()
 grad = Gradient()
 
-
-
+from utilities import dot, outer
 
