@@ -3,7 +3,10 @@
 import math
 import numpy as np
 from numpy import array
+from operator import add
+
 from regions import *
+
 
 ################################################################################
 ############################### Vertices buffer ################################
@@ -33,12 +36,15 @@ class Vertices(object):
   
   def append(self, vertex):
     self._check_cache()
-    d, used = self.d, self.used
-    self.array[used * d : (used + 1) * d] = vertex
+    d, d_aligned, used = self.d, self.d_aligned, self.used
+    self.array[used * d_aligned : used * d_aligned + d] = vertex
     self.__objects.append(vertex)
     vertex.container, vertex.index = self, used
     vertex.dtype = self.dtype
     self.used += 1
+  
+  def extend(self, lst):
+    map(self.append, lst)
   
   def __getitem__(self, i):
     return self.__objects[i]
@@ -69,7 +75,6 @@ class Elements(Vertices): # TODO?
     # . . .
 
 
-_sum = lambda x, y: x + y # TODO import from `operators` or something
 
 
 ################################################################################
@@ -118,7 +123,7 @@ class Mesh(object):
       raise NotImplementedError # TODO
     def _process_vertices(self):
       # find adjacent shapes
-      candidates = set(reduce(_sum, map(lambda v: v.elements, self.vertices), []))
+      candidates = set(reduce(add, map(lambda v: v.elements, self.vertices), []))
       is_adjacent = lambda el: len(set(el.vertices) & set(self.vertices)) >= 2
       self.adjacent = self.adjacent | set(filter(is_adjacent, candidates))
       self.adjacent.discard(self) # just in case...
@@ -131,7 +136,7 @@ class Mesh(object):
   class Triangle(PolygonalElement):
     def __init__(self, v1, v2, v3):
       super(Mesh.Triangle, self).__init__()
-      # TODO: sort points in CW or CCW order
+      # TODO: sort points in CW or CCW order?
       self.vertices = [v1, v2, v3]
       self._process_vertices()
       # linear algebra data

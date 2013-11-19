@@ -24,6 +24,7 @@ class GalerkinMethod(Method):
     super(GalerkinMethod, self).__init__(basis)
     self.numberOfUnknowns = len(basis)
     
+    
   
   def rhs(self, rhs, **kwargs):
     return np.array([dot(rhs, f_n) for f_n in self.basis])

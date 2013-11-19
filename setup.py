@@ -10,5 +10,5 @@ setup(
     author='Tigran Saluev',
     author_email='tigran.saluev(at)gmail.com',
     url='http://github.com/Saluev/python-experiments',
-    packages = ['experiments', 'experiments.computations'],
+    packages = ['experiments', 'experiments.computations', 'experiments.computations.caching'],
 )

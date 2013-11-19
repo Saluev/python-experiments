@@ -27,6 +27,11 @@ class Problem(object):
     method   = self.method(basis = basis, **kwargs)
     rhs      = method.rhs(rhs = equation.rhs(**kwargs), **kwargs)
     operator = method.operator(operator = equation.operator(**kwargs), **kwargs)
+    
+    from matplotlib import pyplot as plt
+    plt.imshow(abs(operator))
+    plt.show()
+    
     initial  = operator.initial(**kwargs)
     solution = self.solver(operator = operator, initial = initial, rhs = rhs, **kwargs)
     return solution
